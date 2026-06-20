@@ -67,8 +67,10 @@ class DroneAgent(Node):
                 self.mission.pop(0)
 
 def main():
+    import sys
+    drone_id = int(sys.argv[1]) if len(sys.argv) > 1 else 1
     rclpy.init()
-    drone = DroneAgent(drone_id=1)
+    drone = DroneAgent(drone_id=drone_id)
     try:
         rclpy.spin(drone)
     except KeyboardInterrupt:
