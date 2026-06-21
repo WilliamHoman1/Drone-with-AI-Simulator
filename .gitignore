@@ -11,6 +11,9 @@ UAV-Swarm-Sim/Logs/
 UAV-Swarm-Sim/obj/
 UAV-Swarm-Sim/*.sln
 UAV-Swarm-Sim/*.userprefs
-
+# Unity project folders to keep this repo focused on the simulator
+My project/
+UAV-Swarm/
+UAV-Swarm-Swim/
 # Mac
 .DS_Store
