@@ -1,2 +1,16 @@
+# Python
 venv/
 __pycache__/
+*.pyc
+.env
+
+# Unity
+UAV-Swarm-Sim/Library/
+UAV-Swarm-Sim/Temp/
+UAV-Swarm-Sim/Logs/
+UAV-Swarm-Sim/obj/
+UAV-Swarm-Sim/*.sln
+UAV-Swarm-Sim/*.userprefs
+
+# Mac
+.DS_Store
