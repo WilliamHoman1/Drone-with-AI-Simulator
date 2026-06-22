@@ -15,5 +15,12 @@ UAV-Swarm-Sim/*.userprefs
 My project/
 UAV-Swarm/
 UAV-Swarm-Swim/
+# ROS / external subproject folders
+ROS-TCP-Connector/
+ROS-TCP-Endpoint/
+ros2_ws/src/ROS-TCP-Endpoint/
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
 # Mac
 .DS_Store
