@@ -1,0 +1,8 @@
+# pinned to satisfy both colcon-core (<80) and ultralytics/torch (>=77.0.3)
+setuptools>=77,<80
+anthropic
+fastapi
+uvicorn
+ultralytics
+opencv-python-headless
+numpy
