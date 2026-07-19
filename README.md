@@ -64,14 +64,26 @@ A fully autonomous drone swarm system built with ROS 2, Python, YOLOv8, the Anth
 
 ### Run the swarm
 
-**1. Start the Docker container:**
+**0. Build the container image (once, or whenever `Dockerfile`/`docker/requirements.txt` change):**
 ```bash
-docker start uav_sim6
-docker exec -it uav_sim6 bash
-source /opt/ros/humble/setup.bash
-cd /home/uav_project
-export ANTHROPIC_API_KEY=your_key_here
+docker build -t uav_swarm:latest .
 ```
+This installs ROS 2 Humble, builds the `ros_tcp_endpoint` package, and installs the Python
+dependencies (`docker/requirements.txt`) — everything needed to run the swarm, from a clean
+Dockerfile instead of a hand-configured container. Mac-side dependencies for the dashboard and
+`sim/sim_3d.py` live in the root `requirements.txt` (`pip install -r requirements.txt` inside `venv/`).
+
+**1. Start the container, with this repo bind-mounted at `/home/uav_project`:**
+```bash
+docker run -it --rm \
+  -v "$(pwd):/home/uav_project" \
+  -p 8000:8000 -p 10000:10000 \
+  -e ANTHROPIC_API_KEY \
+  --name uav_swarm \
+  uav_swarm:latest bash
+```
+Editing files on your Mac immediately shows up inside the container — no rebuild needed for
+Python changes, only for new apt/pip dependencies.
 
 **2. Launch all swarm nodes:**
 ```bash
@@ -80,9 +92,8 @@ python3 launch_swarm.py
 
 **3. Start the ROS-Unity bridge:**
 ```bash
-# In a second container terminal
-source /opt/ros/humble/setup.bash
-cd /home/uav_project/ros2_ws
+# In a second terminal: docker exec -it uav_swarm bash
+cd ros2_ws
 source install/setup.bash
 ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=0.0.0.0
 ```
@@ -99,6 +110,32 @@ streamlit run dashboard.py
 ---
 
 ## Project Structure
+
+```
+Drone_Simulator/
+├── swarm/              # ROS 2 nodes (run inside the Docker container)
+│   ├── drone_agent.py       # per-drone agent node
+│   ├── swarm_coordinator.py # distributed task handoff / coordination
+│   ├── real_detection.py    # live YOLOv8 detection node (camera feed)
+│   ├── vision_node.py       # detection node variant
+│   ├── mission_planner.py   # Claude-powered natural language -> flight plan
+│   ├── ros_bridge.py        # ROS <-> external state bridge
+│   ├── swarm_api.py         # FastAPI service exposing live swarm state
+│   └── swarm_launcher.py    # in-container node launcher
+├── sim/                 # standalone 3D simulation (no ROS/Unity required)
+│   ├── sim_3d.py
+│   └── drone_world.sdf
+├── models/               # YOLO model weights (gitignored, auto-downloaded)
+├── assets/               # demo images
+├── launch_swarm.py       # single entrypoint that starts all swarm/ nodes
+├── dashboard.py          # Streamlit live dashboard (run from your Mac)
+├── Dockerfile             # reproducible ROS 2 + YOLO + swarm container
+├── docker/requirements.txt # Python deps installed inside the container
+├── requirements.txt       # Python deps for the Mac-side venv (dashboard, sim/)
+├── UAV-Swarm-Swim/       # Unity project (own git repo/remote)
+├── ros2_ws/              # ROS 2 workspace (colcon build)
+└── venv/                 # Python virtualenv (gitignored)
+```
 
 ---
 

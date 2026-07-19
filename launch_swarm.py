@@ -8,32 +8,32 @@ import sys
 NODES = [
     {
         'name': 'Drone Agent 1',
-        'cmd': 'python3 /home/uav_project/drone_agent.py',
+        'cmd': 'python3 /home/uav_project/swarm/drone_agent.py',
         'delay': 1
     },
     {
-        'name': 'Drone Agent 2', 
-        'cmd': 'python3 /home/uav_project/drone_agent.py 2',
+        'name': 'Drone Agent 2',
+        'cmd': 'python3 /home/uav_project/swarm/drone_agent.py 2',
         'delay': 1
     },
     {
         'name': 'Drone Agent 3',
-        'cmd': 'python3 /home/uav_project/drone_agent.py 3',
+        'cmd': 'python3 /home/uav_project/swarm/drone_agent.py 3',
         'delay': 1
     },
     {
         'name': 'Swarm Coordinator',
-        'cmd': 'python3 /home/uav_project/swarm_coordinator.py',
+        'cmd': 'python3 /home/uav_project/swarm/swarm_coordinator.py',
         'delay': 2
     },
     {
         'name': 'Vision Node',
-        'cmd': 'python3 /home/uav_project/real_detection.py',
+        'cmd': 'python3 /home/uav_project/swarm/real_detection.py',
         'delay': 2
     },
     {
         'name': 'Mission Planner',
-        'cmd': 'python3 /home/uav_project/mission_planner.py',
+        'cmd': 'python3 /home/uav_project/swarm/mission_planner.py',
         'delay': 2
     }
 ]

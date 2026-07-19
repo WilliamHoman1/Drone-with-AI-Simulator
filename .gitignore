@@ -4,23 +4,18 @@ __pycache__/
 *.pyc
 .env
 
+# Model weights (auto-downloaded by ultralytics if missing)
+models/*.pt
+
 # Unity
-UAV-Swarm-Sim/Library/
-UAV-Swarm-Sim/Temp/
-UAV-Swarm-Sim/Logs/
-UAV-Swarm-Sim/obj/
-UAV-Swarm-Sim/*.sln
-UAV-Swarm-Sim/*.userprefs
-# Unity project folders to keep this repo focused on the simulator
-My project/
-UAV-Swarm/
+# Unity project is its own git repo (has its own .gitignore); keep this repo focused on the simulator
 UAV-Swarm-Swim/
+
 # ROS / external subproject folders
-ROS-TCP-Connector/
-ROS-TCP-Endpoint/
 ros2_ws/src/ROS-TCP-Endpoint/
 ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
+
 # Mac
 .DS_Store
