@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from geometry_msgs.msg import PoseStamped
 import json
 import math
 import time
@@ -30,8 +31,8 @@ class SwarmCoordinator(Node):
                 10
             )
             self.create_subscription(
-                String,
-                f'/drone_{drone_id}/position_update',
+                PoseStamped,
+                f'/drone_{drone_id}/position',
                 lambda msg, id=drone_id: self.position_callback(msg, id),
                 10
             )
@@ -51,9 +52,8 @@ class SwarmCoordinator(Node):
         self.get_logger().info('Swarm coordinator online')
 
     def position_callback(self, msg, drone_id):
-        data = json.loads(msg.data)
-        self.drone_states[drone_id]['x'] = data['x']
-        self.drone_states[drone_id]['y'] = data['y']
+        self.drone_states[drone_id]['x'] = msg.pose.position.x
+        self.drone_states[drone_id]['y'] = msg.pose.position.z
 
     def detection_callback(self, msg, drone_id):
         detections = json.loads(msg.data)
