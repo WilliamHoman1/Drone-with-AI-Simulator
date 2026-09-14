@@ -1,27 +1,27 @@
 # Autonomous Multi-Agent Drone Swarm Simulation
 
-A fully autonomous drone swarm system built with ROS 2, Python, YOLOv8, the Anthropic API, and Unity. Three autonomous drone agents coordinate in real time to patrol a 3D environment, detect objects using computer vision, and dynamically reassign mission objectives using a distributed swarm coordination algorithm.
+Three drones autonomously search an area, spot what's in it, decide among themselves who investigates what, and report a verdict — a complete ISR loop running across Unity and ROS 2.
 
-![Swarm Dashboard](assets/detection_result.jpg)
+Unity simulates the drones, their onboard cameras and their sensor cones. ROS 2 carries every detection, position and order between them. The dispatch logic that decides which drone breaks off for which contact is pure Python, unit tested, and runs in its own container.
 
-## Demo
+![Swarm mission in progress](assets/mission_hud.jpg)
 
-> 3 autonomous drones • Real-time object detection • LLM mission planning • Live 3D visualization
+*Phase 2 mid-mission. Drone 3 is scanning a person at 45%, Drone 2 another at 94%, Drone 1 is en route to a third. Cleared contacts already carry green discs and their verdicts; the seven still open are listed top-left and bracketed in the world. The top-right panel is Drone 2's live onboard camera — the same frames published to ROS 2.*
 
 ---
 
 ## Features
 
 - **Multi-agent swarm** — 3 ROS 2 drone nodes operating autonomously in parallel
-- **A* pathfinding** — optimal obstacle-avoiding navigation between waypoints
-- **YOLOv8 object detection** — real-time computer vision with confidence-based target prioritization
-- **LLM mission planner** — Claude (Anthropic API) converts natural language objectives into structured flight plans
-- **Distributed coordination** — drones communicate detections and hand off targets to the closest available agent
+- **Autonomous area search** — each drone flies a lawnmower sweep of its own sector, with lane spacing derived from its live sensor footprint so the sweep leaves no gaps
+- **Simulated sensor model** — downward cone with field-of-view and line-of-sight occlusion tests, publishing detections in the same JSON shape real CV does
+- **YOLOv8 object detection** — optional drop-in replacement for the simulated sensor, running on the live Unity camera feed
+- **LLM mission planner** — Claude (Anthropic API) turns a clicked Commander-mode order into a structured flight plan
+- **Distributed coordination** — detections are shared across drones, deduplicated, and dispatched to the closest available agent; an urgent contact preempts a drone busy with a lesser one
 - **Live dashboard** — Streamlit web UI showing drone positions, detection log, and mission log in real time
 - **FastAPI bridge** — exposes live swarm state as a REST API
-- **Unity 3D visualization** — real drone movement in a 3D environment connected to live ROS 2 data
 - **Single command** — `docker compose up` starts every process; Unity self-wires on Play
-- **Tested dispatch logic** — the task allocator is pure Python with a 31-case pytest suite
+- **Tested dispatch logic** — the task allocator is pure Python with a 31-case pytest suite, validated by mutation testing
 
 ---
 
@@ -60,6 +60,10 @@ A fully autonomous drone swarm system built with ROS 2, Python, YOLOv8, the Anth
 
 Real CV (`real_detection.py`, YOLOv8 on `camera_frame`) is an optional drop-in
 replacement for `DroneSensor` — same `/drone_N/detections` topic and JSON shape.
+Nothing downstream can tell the difference, which is the point of keeping the
+contract between them to one message type.
+
+![YOLOv8 detection](assets/detection_result.jpg)
 
 ---
 
@@ -69,9 +73,9 @@ replacement for `DroneSensor` — same `/drone_N/detections` topic and JSON shap
 |---|---|
 | Robotics middleware | ROS 2 Humble |
 | Simulation | Docker (Ubuntu 22.04 ARM64) |
-| Object detection | YOLOv8 (Ultralytics) |
+| Object detection | YOLOv8 (Ultralytics), plus a simulated sensor model |
 | Mission planning | Anthropic API (Claude) |
-| Pathfinding | A* search algorithm |
+| Task allocation | Greedy nearest-available dispatch with priority preemption |
 | API bridge | FastAPI + Uvicorn |
 | Dashboard | Streamlit + Plotly |
 | 3D visualization | Unity 6.3 URP + C# |
@@ -178,6 +182,19 @@ Drone_Simulator/
 
 ## What you're looking at
 
+### Reading the screen
+
+| Where | What it is |
+|---|---|
+| Top left | Area swept, contacts cleared, contacts still open. Then one row per drone: its sector, what it's doing right now, and its sector coverage bar. Below that, every contact still awaiting a scan. |
+| Top centre | The mission phase, and one line explaining it. |
+| Top right | The live onboard camera of whichever drone matters right now. |
+| Bottom left | The mission log — every tasking, scan and verdict, newest first. |
+| Bottom right | The legend during the briefing, then the key bindings. |
+| In the world | Coloured boxes are sector boundaries. A ring under a drone is its sensor footprint. Shaded ground has been searched. A pulsing bracket is a contact awaiting a scan; a green disc is one already cleared. |
+
+### The loop
+
 The scene runs a full ISR loop. Watching it, in order:
 
 1. **Briefing** — the objective banner names the task. The search area is one
@@ -221,9 +238,15 @@ work the swarm still owes.
 |---|---|
 | `H` | cycle HUD detail — Full → Minimal → Off |
 | `L` | toggle the legend (shows itself during the briefing) |
-| `V` | hand the camera back to you (director camera ↔ free camera) |
+| `V` | toggle director camera ↔ free camera |
+| `1` `2` `3` | free camera only — jump to that drone |
+| `0` | free camera only — back to the overview |
+| `W` `A` `S` `D` `Q` `E` | free camera only — fly it yourself (hold `Shift` for speed) |
 | `R` | restart the mission — resets Unity *and* the ROS 2 side |
 | `C` | Commander mode — click the terrain to task a drone manually |
+
+`V` hands control over, it does not move the camera. To follow one drone, press
+`V` and then `1`, `2` or `3`.
 
 `R` publishes to `/swarm/reset`, which `swarm_coordinator` and `swarm_api` both
 subscribe to: the coordinator drops its targets, assignments and resolve
@@ -266,7 +289,7 @@ passed only because a *different* code path happened to produce the same result.
 ## Roadmap
 
 - [x] Multi-agent ROS 2 swarm
-- [x] A* pathfinding and task prioritization
+- [x] Task allocation with priority preemption
 - [x] YOLOv8 real-time object detection
 - [x] LLM mission planner (Commander mode)
 - [x] Distributed swarm coordination
@@ -274,7 +297,9 @@ passed only because a *different* code path happened to produce the same result.
 - [x] Unity 3D visualization with per-drone camera feeds
 - [x] Simulated sensor model + autonomous area search (lawnmower sweep)
 - [x] Threat classification and high-priority alert escalation
+- [x] Mission reset across both Unity and ROS 2
 - [ ] Gazebo physics integration (`gazebo/drone_world.sdf` started)
+- [ ] Obstacle-aware routing — drones currently fly direct to waypoints
 - [ ] Reinforcement learning for adaptive patrol routes
 
 ---
