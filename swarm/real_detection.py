@@ -11,6 +11,24 @@ from ultralytics import YOLO
 CONFIDENCE_THRESHOLD = 0.4
 DRONE_IDS = (1, 2, 3)
 
+# Threat/priority tier per detected class — the single point of classification, so
+# every downstream consumer (swarm_coordinator's dispatch, the dashboard, Unity's
+# markers) sees the same tier for the same detection instead of re-deriving it.
+# Tuned for the ISR/perimeter-monitoring framing in the README: people are the
+# highest-priority thing to investigate, vehicles are next, everything else is
+# background noise for this scenario.
+PRIORITY_TIERS = {
+    'high': {'person'},
+    'medium': {'car', 'truck', 'bus', 'motorcycle', 'bicycle', 'boat', 'airplane', 'train'},
+}
+
+
+def classify_tier(label):
+    for tier, labels in PRIORITY_TIERS.items():
+        if label in labels:
+            return tier
+    return 'low'
+
 
 class RealVisionNode(Node):
     """Runs YOLO on each drone's live camera_frame topic (published by Unity)
@@ -61,6 +79,7 @@ class RealVisionNode(Node):
                         'center': (int(x), int(y)),
                         'frame_width': width,
                         'frame_height': height,
+                        'tier': classify_tier(label),
                     })
 
         if detections:

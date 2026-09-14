@@ -1,0 +1,26 @@
+# One command to run the whole stack:
+#
+#   docker compose up --build
+#
+# Then open http://localhost:8501 for the dashboard and press Play in Unity.
+# ANTHROPIC_API_KEY is read from your shell or from the .env file in this
+# directory (Compose loads .env automatically); it's only needed for Commander
+# mode's LLM planning, and the stack runs fine without it.
+services:
+  swarm:
+    build: .
+    image: uav_swarm:latest
+    container_name: uav_swarm
+    command: python3 launch_swarm.py
+    ports:
+      - "8000:8000"    # FastAPI swarm state
+      - "8501:8501"    # Streamlit dashboard
+      - "10000:10000"  # ROS-TCP endpoint (Unity)
+    volumes:
+      # Bind-mounted so Python edits on the host take effect on restart with no
+      # rebuild. Only new apt/pip dependencies need `--build`.
+      - .:/home/uav_project
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    stdin_open: true
+    tty: true

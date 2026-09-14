@@ -37,7 +37,7 @@ RUN pip3 install --no-cache-dir \
 COPY docker/entrypoint.sh /ros_entrypoint.sh
 RUN chmod +x /ros_entrypoint.sh
 
-EXPOSE 8000 10000
+EXPOSE 8000 8501 10000
 
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]

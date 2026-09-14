@@ -6,3 +6,7 @@ uvicorn
 ultralytics
 opencv-python-headless
 numpy
+# dashboard, so the whole stack can run in one container
+streamlit
+plotly
+requests

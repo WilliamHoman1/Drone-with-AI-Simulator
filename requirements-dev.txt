@@ -1,0 +1,4 @@
+# Test dependencies. The suite covers swarm/task_allocation.py, which is pure
+# Python — no ROS, Unity or Docker needed:
+#     pip install -r requirements-dev.txt && pytest
+pytest

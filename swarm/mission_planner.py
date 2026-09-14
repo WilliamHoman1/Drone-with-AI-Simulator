@@ -1,128 +1,111 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from geometry_msgs.msg import PoseStamped
 import anthropic
 import json
+import math
 import os
+
+# Commander-mode mission planner.
+#
+# Autonomous target handling lives entirely in swarm_coordinator.py — this node
+# used to ALSO subscribe to /drone_*/detections and publish missions, which
+# fought the coordinator for control of the same topic and sent every drone the
+# same fallback waypoints. It now only handles explicit operator orders from
+# Unity's Commander mode (/commander/order), optionally using Claude to turn a
+# free-text order into waypoints.
+
+MODEL = 'claude-opus-5'
+
 
 class MissionPlanner(Node):
     def __init__(self):
         super().__init__('mission_planner')
-        self.client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
-        self.drones = {1: 'idle', 2: 'idle', 3: 'idle'}
-        self.drone_states = {
-            1: {'x': 0.0, 'y': 0.0},
-            2: {'x': 20.0, 'y': 0.0},
-            3: {'x': 10.0, 'y': 20.0}
-        }
 
-        # Listen to all drone detections
-        for drone_id in self.drones:
+        key = os.getenv('ANTHROPIC_API_KEY')
+        self.client = anthropic.Anthropic(api_key=key) if key else None
+        if self.client is None:
+            self.get_logger().warn('ANTHROPIC_API_KEY not set — orders will be routed without LLM planning')
+
+        # Sector centres of the 60 x 30 search area (see SearchPattern.cs).
+        self.drone_pos = {1: (10.0, 15.0), 2: (30.0, 15.0), 3: (50.0, 15.0)}
+
+        for drone_id in (1, 2, 3):
             self.create_subscription(
-                String,
-                f'/drone_{drone_id}/detections',
-                lambda msg, id=drone_id: self.detection_callback(msg, id),
-                10
-            )
-            # Track drone positions
-            self.create_subscription(
-                String,
-                f'/drone_{drone_id}/position_update',
-                lambda msg, id=drone_id: self.position_callback(msg, id),
-                10
+                PoseStamped, f'/drone_{drone_id}/position',
+                lambda msg, i=drone_id: self.position_cb(msg, i), 10
             )
 
-        # Publisher — sends missions to each drone
         self.mission_publishers = {
-            id: self.create_publisher(String, f'/drone_{id}/mission', 10)
-            for id in self.drones
+            i: self.create_publisher(String, f'/drone_{i}/mission', 10)
+            for i in (1, 2, 3)
         }
+        self.create_subscription(String, '/commander/order', self.order_cb, 10)
+        self.response_publisher = self.create_publisher(String, '/commander/response', 10)
 
-        # Commander order subscription
-        self.create_subscription(
-            String,
-            '/commander/order',
-            self.commander_callback,
-            10
-        )
+        self.get_logger().info('Mission planner online — waiting for commander orders')
 
-        self.commander_publisher = self.create_publisher(
-            String, '/commander/response', 10
-        )
+    def position_cb(self, msg, drone_id):
+        self.drone_pos[drone_id] = (msg.pose.position.x, msg.pose.position.z)
 
-        self.get_logger().info('Mission planner online — waiting for detections')
+    def closest_drone(self, x, z):
+        return min(self.drone_pos,
+                   key=lambda i: math.hypot(self.drone_pos[i][0] - x, self.drone_pos[i][1] - z))
 
-    def position_callback(self, msg, drone_id):
-        try:
-            data = json.loads(msg.data)
-            self.drone_states[drone_id]['x'] = data['x']
-            self.drone_states[drone_id]['y'] = data['y']
-        except:
-            pass
-
-    def detection_callback(self, msg, drone_id):
-        detections = json.loads(msg.data)
-        self.get_logger().info(f'Planner received detections from drone {drone_id}: {detections}')
-        mission = self.plan_mission(detections, drone_id)
-        mission_msg = String()
-        mission_msg.data = json.dumps(mission)
-        self.mission_publishers[drone_id].publish(mission_msg)
-
-    def commander_callback(self, msg):
+    def order_cb(self, msg):
         try:
             order = json.loads(msg.data)
-            x, z = float(order['x']), float(order['z'])
+        except json.JSONDecodeError:
+            self.get_logger().error(f'Unparseable commander order: {msg.data!r}')
+            return
 
-            # Find closest available drone
-            best_drone = min(
-                self.drone_states.keys(),
-                key=lambda id: abs(self.drone_states[id]['x'] - x) + abs(self.drone_states[id]['y'] - z)
-            )
+        x, z = float(order['x']), float(order['z'])
+        drone_id = self.closest_drone(x, z)
+        waypoints = self.plan(order, drone_id, x, z)
 
-            # Send mission to closest drone
-            mission = [[round(x, 1), round(z, 1)]]
-            mission_msg = String()
-            mission_msg.data = json.dumps(mission)
-            self.mission_publishers[best_drone].publish(mission_msg)
+        self.mission_publishers[drone_id].publish(String(data=json.dumps(waypoints)))
+        self.response_publisher.publish(
+            String(data=f'Drone {drone_id} dispatched to ({x:.1f}, {z:.1f})')
+        )
+        self.get_logger().info(f'Commander order → Drone {drone_id} via {waypoints}')
 
-            # Respond with assignment
-            response = String()
-            response.data = f"Drone {best_drone} dispatched to ({x:.1f}, {z:.1f})"
-            self.commander_publisher.publish(response)
+    def plan(self, order, drone_id, x, z):
+        """Turn an order into a waypoint list. Uses Claude for free-text orders,
+        otherwise just flies straight to the point."""
+        instruction = order.get('instruction')
+        if not instruction or self.client is None:
+            return [[round(x, 1), round(z, 1)]]
 
-            self.get_logger().info(f"Commander order: Drone {best_drone} → ({x:.1f}, {z:.1f})")
-        except Exception as e:
-            self.get_logger().error(f"Commander callback error: {e}")
-
-    def plan_mission(self, detections, drone_id):
-        prompt = f"""
-        Drone {drone_id} detected: {json.dumps(detections)}
-        Generate a patrol mission as a JSON array of [x, y] waypoints.
-        Prioritize investigating high confidence detections.
-        Return ONLY a JSON array like [[x1,y1],[x2,y2],[x3,y3]].
-        Coordinates must be between 0 and 50.
-        """
-        response = self.client.messages.create(
-            model='claude-sonnet-4-6',
-            max_tokens=200,
-            messages=[{'role': 'user', 'content': prompt}]
+        prompt = (
+            f"Drone {drone_id} is at {self.drone_pos[drone_id]}. Operator order: "
+            f"\"{instruction}\" near ({x:.0f}, {z:.0f}). Return ONLY a JSON array of "
+            f"[x, z] waypoints that carries out the order, ending at the target. "
+            f"The search area is x 0-60, z 0-30. Example: [[10,10],[25,25]]"
         )
         try:
-            waypoints = json.loads(response.content[0].text)
-            self.get_logger().info(f'LLM planned mission for drone {drone_id}: {waypoints}')
-            return waypoints
-        except:
-            return [[10, 10], [20, 20], [30, 30]]
+            resp = self.client.messages.create(
+                model=MODEL, max_tokens=300,
+                output_config={'effort': 'low'},
+                messages=[{'role': 'user', 'content': prompt}],
+            )
+            text = next(b.text for b in resp.content if b.type == 'text')
+            return json.loads(text)
+        except Exception as e:
+            self.get_logger().warn(f'LLM planning failed ({e}) — flying direct')
+            return [[round(x, 1), round(z, 1)]]
+
 
 def main():
     rclpy.init()
-    planner = MissionPlanner()
+    node = MissionPlanner()
     try:
-        rclpy.spin(planner)
+        rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-    planner.destroy_node()
+    node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
