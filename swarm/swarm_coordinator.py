@@ -13,24 +13,12 @@ from rclpy.node import Node
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped
 
+from ros_utils import safe_json
 from task_allocation import Alert, Assign, Resolve, TaskAllocator
 
 # Sector centres of the 60 x 30 search area (see SearchPattern.cs). Overwritten
 # by Unity's real positions as soon as they arrive.
 DRONE_HOME = {1: (10.0, 15.0), 2: (30.0, 15.0), 3: (50.0, 15.0)}
-
-
-def safe_json(node, msg, what):
-    """Parse a ROS String payload, logging and skipping malformed messages.
-
-    An exception raised inside a ROS callback propagates out of the executor and
-    takes the whole node down — one bad frame would silently stop all tasking.
-    """
-    try:
-        return json.loads(msg.data)
-    except (json.JSONDecodeError, TypeError) as e:
-        node.get_logger().warn(f'Bad {what} payload ({e}): {msg.data[:120]!r}')
-        return None
 
 
 class SwarmCoordinator(Node):

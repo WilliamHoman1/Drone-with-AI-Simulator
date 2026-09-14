@@ -5,45 +5,27 @@ import time
 st.set_page_config(page_title="UAV Swarm Dashboard", page_icon="🛸", layout="wide")
 
 # ---------------------------------------------------------------- data source
+#
+# There is exactly one source of truth here: swarm_api. When it is unreachable
+# the dashboard says so and renders empty.
+#
+# It used to fall back to a generator that invented plausible detections —
+# random labels, random confidences, drifting positions — flagged only by a small
+# chip in the corner. That is worse than showing nothing: the failure looked
+# exactly like a working system, and the labels it invented ('backpack',
+# 'truck') were objects that existed nowhere in the simulation.
 import requests
+
+EMPTY = {'drones': {}, 'detections': [], 'missions': [],
+         'alerts': [], 'scans': [], 'active_targets': 0}
+
 try:
     data = requests.get('http://localhost:8000/state', timeout=2).json()
     data['drones'] = {int(k): v for k, v in data['drones'].items()}
     ros_connected = True
 except Exception:
+    data = EMPTY
     ros_connected = False
-    import random
-    ss = st.session_state
-    ss.setdefault('drones', {
-        1: {'x': 10.0, 'y': 15.0, 'status': 'patrolling'},
-        2: {'x': 30.0, 'y': 15.0, 'status': 'patrolling'},
-        3: {'x': 50.0, 'y': 15.0, 'status': 'patrolling'},
-    })
-    ss.setdefault('detections', [])
-    ss.setdefault('missions', [])
-    ss.setdefault('alerts', [])
-    for did, d in ss.drones.items():
-        d['x'] += random.uniform(-0.5, 0.5)
-        d['y'] += random.uniform(-0.5, 0.5)
-        if random.random() < 0.08:
-            label = random.choice(['person', 'car', 'truck', 'backpack'])
-            tier = 'high' if label == 'person' else 'medium' if label in ('car', 'truck') else 'low'
-            ss.detections.insert(0, {
-                'drone': did, 'label': label, 'tier': tier,
-                'confidence': round(random.uniform(0.7, 0.98), 2),
-                'time': time.strftime('%H:%M:%S'),
-                'x': round(d['x'], 1), 'y': round(d['y'], 1),
-            })
-            if tier == 'high':
-                ss.alerts.insert(0, {
-                    'label': label, 'detected_by': did, 'confidence': round(random.uniform(0.7, 0.98), 2),
-                    'x': round(d['x'], 1), 'y': round(d['y'], 1), 'time': time.strftime('%H:%M:%S'),
-                })
-    ss.detections = ss.detections[:20]
-    ss.alerts = ss.alerts[:20]
-    data = {'drones': ss.drones, 'detections': ss.detections,
-            'missions': ss.missions, 'alerts': ss.alerts,
-            'scans': [], 'active_targets': 0}
 
 drones = data['drones']
 detections = list(data.get('detections', []))
@@ -62,8 +44,15 @@ with head_l:
 with head_r:
     st.markdown(
         f"<div style='text-align:right;padding-top:8px;'>"
-        f"{'🟢 ROS 2 live' if ros_connected else '🟡 Simulated data'}</div>",
+        f"{'🟢 ROS 2 live' if ros_connected else '🔴 No connection'}</div>",
         unsafe_allow_html=True,
+    )
+
+if not ros_connected:
+    st.error(
+        "Cannot reach the swarm API on http://localhost:8000. "
+        "Start the stack with `docker compose up`, then reload this page. "
+        "Nothing below is live."
     )
 
 # ---------------------------------------------------------------- KPI row

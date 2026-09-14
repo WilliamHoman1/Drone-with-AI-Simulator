@@ -3,10 +3,11 @@ from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped
 import rclpy
 from rclpy.node import Node
-import json
 import threading
 import time
 import uvicorn
+
+from ros_utils import safe_json
 
 app = FastAPI()
 
@@ -23,20 +24,6 @@ state = {
     'scans': [],
     'active_targets': 0
 }
-
-def safe_json(node, msg, what):
-    """Parse a ROS String payload, logging and skipping malformed messages.
-
-    An exception raised inside a ROS callback propagates out of the executor and
-    takes the whole node down — one bad frame from Unity would silently kill the
-    dashboard bridge for the rest of the run.
-    """
-    try:
-        return json.loads(msg.data)
-    except (json.JSONDecodeError, TypeError) as e:
-        node.get_logger().warn(f'Bad {what} payload ({e}): {msg.data[:120]!r}')
-        return None
-
 
 class StateListener(Node):
     def __init__(self):
